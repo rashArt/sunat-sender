@@ -1,7 +1,7 @@
 {
     "name": "rashart/sunat-sender",
-    "description": "Paquete que conecta una aplicación con SUNAT utilizando envio directo como OSE o PSE, con posibilidad de extender proveedores",
-    "keywords": ["laravel", "sunat", "facturacion", "electronica", "peru", "ose", "pse"],
+    "description": "Paquete Laravel que conecta cualquier proyecto con SUNAT para facturación electrónica peruana. Soporta envío directo, OSE y PSE.",
+    "keywords": ["laravel", "sunat", "facturacion", "electronica", "peru", "ose", "pse", "cpe", "factura"],
     "license": "MIT",
     "type": "library",
     "authors": [
@@ -11,13 +11,18 @@
         }
     ],
     "require": {
-        "php": "^8.1",
-        "illuminate/support": "^10.0|^11.0",
-        "illuminate/http": "^10.0|^11.0",
-        "guzzlehttp/guzzle": "^7.0"
+        "php": "^8.3",
+        "ext-soap": "*",
+        "ext-dom": "*",
+        "ext-openssl": "*",
+        "ext-zip": "*",
+        "illuminate/support": "^10.0|^11.0|^12.0",
+        "illuminate/database": "^10.0|^11.0|^11.0|^12.0",
+        "illuminate/console": "^10.0|^11.0|^12.0",
+        "robrichards/xmlseclibs": "^3.1"
     },
     "require-dev": {
-        "orchestra/testbench": "^8.0|^9.0",
+        "orchestra/testbench": "^8.0|^9.0|^10.0",
         "phpunit/phpunit": "^10.0|^11.0",
         "mockery/mockery": "^1.6"
     },
@@ -41,12 +46,9 @@
             }
         }
     },
-    "minimum-stability": "dev",
+    "minimum-stability": "stable",
     "prefer-stable": true,
     "config": {
-        "sort-packages": true,
-        "allow-plugins": {
-            "php-http/discovery": true
-        }
+        "sort-packages": true
     }
 }
