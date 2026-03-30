@@ -1,23 +1,15 @@
 <?php
 
+declare(strict_types=1);
+
 namespace RashArt\SunatSender\Exceptions;
 
-use RuntimeException;
-
-class SunatSenderException extends RuntimeException
+/**
+ * Excepción base del paquete sunat-sender.
+ * Todas las demás excepciones del paquete heredan de esta clase,
+ * lo que permite al consumidor capturar cualquier error del paquete
+ * con un solo catch (SunatSenderException).
+ */
+class SunatSenderException extends \RuntimeException
 {
-    public static function providerNotFound(string $providerName): self
-    {
-        return new self("Proveedor SUNAT no encontrado: [{$providerName}].");
-    }
-
-    public static function configurationMissing(string $key): self
-    {
-        return new self("Configuración requerida no encontrada: [{$key}].");
-    }
-
-    public static function invalidDocument(string $reason): self
-    {
-        return new self("Documento inválido: {$reason}");
-    }
 }

@@ -3,10 +3,11 @@
 namespace RashArt\SunatSender;
 
 use Illuminate\Support\ServiceProvider;
-use RashArt\SunatSender\Contracts\SunatSenderInterface;
 use RashArt\SunatSender\Contracts\ProviderInterface;
+use RashArt\SunatSender\Contracts\SunatSenderInterface;
 use RashArt\SunatSender\Providers\OseProvider;
 use RashArt\SunatSender\Providers\PseProvider;
+use RashArt\SunatSender\Providers\SunatDirectProvider;
 use RashArt\SunatSender\Services\SunatSenderService;
 
 class SunatSenderServiceProvider extends ServiceProvider
@@ -19,8 +20,8 @@ class SunatSenderServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(SunatSenderInterface::class, function ($app) {
-            $config = $app['config']['sunat-sender'];
-            $provider = $this->resolveProvider($config['provider'] ?? 'ose', $config);
+            $config   = $app['config']['sunat-sender'];
+            $provider = $this->resolveProvider($config['provider'] ?? 'sunat', $config);
 
             return new SunatSenderService($provider, $config);
         });
@@ -39,16 +40,18 @@ class SunatSenderServiceProvider extends ServiceProvider
 
     protected function resolveProvider(string $providerName, array $config): ProviderInterface
     {
-        $providers = $config['providers'] ?? [];
-
-        if (isset($providers[$providerName])) {
-            $providerClass = $providers[$providerName];
-            return new $providerClass($config);
+        // Primero busca en proveedores personalizados registrados en config
+        $customProviders = $config['providers'] ?? [];
+        if (isset($customProviders[$providerName])) {
+            $class = $customProviders[$providerName];
+            return new $class($config);
         }
 
+        // Proveedores nativos del paquete
         return match ($providerName) {
-            'pse' => new PseProvider($config),
-            default => new OseProvider($config),
+            'ose'   => new OseProvider($config),
+            'pse'   => new PseProvider($config),
+            default => new SunatDirectProvider($config), // 'sunat' o cualquier valor
         };
     }
 }
