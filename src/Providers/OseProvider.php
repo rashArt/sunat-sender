@@ -1,23 +1,25 @@
 <?php
 
+declare(strict_types=1);
+
 namespace RashArt\SunatSender\Providers;
 
 use GuzzleHttp\Exception\GuzzleException;
-use RashArt\SunatSender\DTOs\SendableDocument;
+use RashArt\SunatSender\DTOs\DocumentData;
 use RashArt\SunatSender\DTOs\SunatResponse;
 use RashArt\SunatSender\Exceptions\ProviderException;
 
 /**
- * Proveedor para envío a través de un OSE
- * (Operador de Servicios Electrónicos autorizado por SUNAT).
+ * Envío a través de un OSE (Operador de Servicios Electrónicos).
  *
- * El OSE actúa como intermediario autorizado por SUNAT. Recibe el
- * XML del emisor, lo valida contra las reglas UBL/SUNAT y reenvía
- * la respuesta (CDR) de vuelta. Ejemplos: Efact, Nubefact, etc.
+ * El OSE actúa como intermediario autorizado por SUNAT:
+ * recibe el XML firmado, lo valida y retorna el CDR.
+ * Ejemplos de OSE: Efact, Nubefact, Facturalo.pe.
  *
  * Requiere en config:
- *   - ose_url    → URL base del API del OSE
- *   - api_token  → Bearer token del OSE
+ *   provider_url → URL base del API REST del OSE
+ *   api_token    → Bearer token
+ *   api_key      → API key adicional (opcional, depende del OSE)
  */
 class OseProvider extends AbstractSunatProvider
 {
@@ -26,123 +28,97 @@ class OseProvider extends AbstractSunatProvider
         return 'ose';
     }
 
-    public function send(SendableDocument $document): SunatResponse
+    // ------------------------------------------------------------------ //
+    //  ProviderInterface
+    // ------------------------------------------------------------------ //
+
+    public function sendBill(DocumentData $document): SunatResponse
     {
         $endpoint = $this->getBaseUrl() . '/api/documents/send';
+        $zipBin   = $this->buildZip($document);
 
         try {
             $response = $this->httpClient->post($endpoint, [
                 'headers' => $this->buildHeaders(),
                 'json'    => [
-                    'ruc'         => $this->config['ruc'],
-                    'fileName'    => $document->getFileName(),
-                    'contentFile' => base64_encode($document->xmlContent),
+                    'ruc'         => $document->ruc,
+                    'fileName'    => $document->getZipFileName(),
+                    'contentFile' => base64_encode($zipBin),
                     'metadata'    => $document->metadata,
                 ],
             ]);
 
             $body = json_decode((string) $response->getBody(), true);
 
-            return SunatResponse::success(
-                code: $body['sunatCode'] ?? 0,
-                message: $body['sunatDescription'] ?? 'Documento aceptado por OSE',
-                cdrContent: $body['cdr'] ?? null,
-                raw: $body,
+            if (! ($body['success'] ?? false)) {
+                return SunatResponse::rejected(
+                    (int) ($body['code'] ?? -1),
+                    $body['message'] ?? 'OSE rechazó el documento',
+                    $body
+                );
+            }
+
+            return SunatResponse::accepted(
+                (int) ($body['code'] ?? 0),
+                $body['message'] ?? 'Aceptado',
+                $body['cdr'] ?? '',
+                $body
             );
         } catch (GuzzleException $e) {
-            throw ProviderException::connectionFailed($this->getName(), $e->getMessage());
+            throw new ProviderException("OSE HTTP error en sendBill: {$e->getMessage()}", 0, $e);
         }
     }
 
-    public function sendBatch(array $documents): SunatResponse
+    public function getStatusCdr(string $ruc, string $documentType, string $series, int $correlative): SunatResponse
     {
-        $endpoint = $this->getBaseUrl() . '/api/documents/batch';
+        $endpoint = $this->getBaseUrl() . '/api/documents/status';
 
         try {
-            $response = $this->httpClient->post($endpoint, [
+            $response = $this->httpClient->get($endpoint, [
                 'headers' => $this->buildHeaders(),
-                'json'    => [
-                    'ruc'       => $this->config['ruc'],
-                    'documents' => array_map(fn ($d) => [
-                        'fileName'    => $d->getFileName(),
-                        'contentFile' => base64_encode($d->xmlContent),
-                    ], $documents),
+                'query'   => [
+                    'ruc'           => $ruc,
+                    'document_type' => $documentType,
+                    'series'        => $series,
+                    'correlative'   => $correlative,
                 ],
             ]);
 
             $body = json_decode((string) $response->getBody(), true);
 
-            return SunatResponse::success(
-                code: 0,
-                message: 'Lote enviado al OSE',
-                ticketNumber: $body['ticket'] ?? null,
-                raw: $body,
+            if (! ($body['success'] ?? false)) {
+                return SunatResponse::rejected(
+                    (int) ($body['code'] ?? -1),
+                    $body['message'] ?? 'No encontrado en OSE',
+                    $body
+                );
+            }
+
+            return SunatResponse::accepted(
+                (int) ($body['code'] ?? 0),
+                $body['message'] ?? 'CDR encontrado',
+                $body['cdr'] ?? '',
+                $body
             );
         } catch (GuzzleException $e) {
-            throw ProviderException::connectionFailed($this->getName(), $e->getMessage());
+            throw new ProviderException("OSE HTTP error en getStatusCdr: {$e->getMessage()}", 0, $e);
         }
     }
 
-    public function getStatus(string $ticketNumber): SunatResponse
-    {
-        $endpoint = $this->getBaseUrl() . '/api/documents/status/' . $ticketNumber;
+    // ------------------------------------------------------------------ //
+    //  Internals
+    // ------------------------------------------------------------------ //
 
-        try {
-            $response = $this->httpClient->get($endpoint, [
-                'headers' => $this->buildHeaders(),
-            ]);
-
-            $body = json_decode((string) $response->getBody(), true);
-
-            return SunatResponse::success(
-                code: $body['sunatCode'] ?? 0,
-                message: $body['sunatDescription'] ?? 'Consulta OK',
-                cdrContent: $body['cdr'] ?? null,
-                ticketNumber: $ticketNumber,
-                raw: $body,
-            );
-        } catch (GuzzleException $e) {
-            throw ProviderException::connectionFailed($this->getName(), $e->getMessage());
-        }
-    }
-
-    public function healthCheck(): bool
-    {
-        try {
-            $response = $this->httpClient->get(
-                $this->getBaseUrl() . '/health',
-                ['headers' => $this->buildHeaders()]
-            );
-            return $response->getStatusCode() === 200;
-        } catch (GuzzleException) {
-            return false;
-        }
-    }
-
-    // -----------------------------------------------------------------------
-    // Internos
-    // -----------------------------------------------------------------------
-
-    protected function requiredConfigKeys(): array
-    {
-        return ['ruc', 'ose_url', 'api_token'];
-    }
-
-    protected function getBaseUrl(): string
-    {
-        return rtrim($this->config['ose_url'], '/');
-    }
-
-    protected function buildHeaders(): array
+    private function buildHeaders(): array
     {
         $headers = [
-            'Authorization' => 'Bearer ' . $this->config['api_token'],
+            'Authorization' => 'Bearer ' . ($this->config['api_token'] ?? ''),
             'Accept'        => 'application/json',
             'Content-Type'  => 'application/json',
         ];
 
-        if (!empty($this->config['api_key'])) {
-            $headers['X-API-Key'] = $this->config['api_key'];
+        if (! empty($this->config['api_key'])) {
+            $headers['X-Api-Key'] = $this->config['api_key'];
         }
 
         return $headers;

@@ -4,90 +4,66 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Proveedor Activo
+    | Proveedor de envío activo
     |--------------------------------------------------------------------------
-    |
-    | Define la modalidad de envío a SUNAT:
-    |
-    |   'sunat' → Envío DIRECTO a SUNAT (web services oficiales, sin intermediario)
-    |   'ose'   → A través de un OSE (Operador de Servicios Electrónicos autorizado)
-    |   'pse'   → A través de un PSE (Proveedor de Servicios Electrónicos comercial)
-    |
-    | También puedes registrar un proveedor personalizado en el array 'providers'.
-    |
+    | Valores nativos: 'sunat' | 'ose' | 'pse'
+    | Para usar un proveedor personalizado, registra su clase en custom_providers
+    | y pon su clave aquí.
     */
-
     'provider' => env('SUNAT_PROVIDER', 'sunat'),
 
     /*
     |--------------------------------------------------------------------------
-    | Credenciales del Emisor
+    | Credenciales SOL del emisor
     |--------------------------------------------------------------------------
-    |
-    | RUC y credenciales SOL del emisor. Requerido para la modalidad 'sunat'.
-    | En OSE/PSE, el RUC también puede ser requerido dependiendo del proveedor.
-    |
+    | Estas credenciales se usan cuando el provider es 'sunat' (SOAP directo).
+    | Para OSE/PSE las credenciales son del API externo (api_token / api_key).
     */
-
-    'ruc'      => env('SUNAT_RUC'),
-    'username' => env('SUNAT_SOL_USERNAME', 'MODDATOS'),
-    'password' => env('SUNAT_SOL_PASSWORD'),
+    'account' => [
+        'ruc'          => env('SUNAT_RUC', ''),
+        'sol_user'     => env('SUNAT_SOL_USER', ''),
+        'sol_password' => env('SUNAT_SOL_PASSWORD', ''),
+        'certificate'  => env('SUNAT_CERTIFICATE', ''),   // Contenido PEM
+        'business_name'=> env('SUNAT_BUSINESS_NAME', ''),
+        'trade_name'   => env('SUNAT_TRADE_NAME', ''),
+    ],
 
     /*
     |--------------------------------------------------------------------------
-    | URLs de los Servicios
+    | Configuración de conexión al proveedor externo (OSE / PSE)
     |--------------------------------------------------------------------------
-    |
-    | sunat_url → URL base para envío DIRECTO a SUNAT
-    |   Beta:       https://e-beta.sunat.gob.pe
-    |   Producción: https://e-factura.sunat.gob.pe
-    |
-    | ose_url   → URL base del API del OSE contratado
-    | pse_url   → URL base del API del PSE contratado
-    |
     */
-
-    'sunat_url' => env('SUNAT_URL', 'https://e-beta.sunat.gob.pe'),
-    'ose_url'   => env('SUNAT_OSE_URL'),
-    'pse_url'   => env('SUNAT_PSE_URL'),
+    'provider_url' => env('SUNAT_PROVIDER_URL', ''),
+    'api_token'    => env('SUNAT_API_TOKEN', ''),
+    'api_key'      => env('SUNAT_API_KEY', ''),
 
     /*
     |--------------------------------------------------------------------------
-    | Credenciales OSE / PSE
+    | Entorno
     |--------------------------------------------------------------------------
-    |
-    | Token Bearer y API key para autenticarse con el OSE o PSE seleccionado.
-    | Solo requeridos cuando provider = 'ose' o provider = 'pse'.
-    |
+    | sandbox=true apunta a los endpoints Beta de SUNAT para pruebas.
     */
-
-    'api_token' => env('SUNAT_API_TOKEN'),
-    'api_key'   => env('SUNAT_API_KEY'),
+    'sandbox' => env('SUNAT_SANDBOX', false),
 
     /*
     |--------------------------------------------------------------------------
-    | Configuración de Red
+    | HTTP / SOAP timeouts (segundos)
     |--------------------------------------------------------------------------
     */
-
     'timeout'         => env('SUNAT_TIMEOUT', 30),
     'connect_timeout' => env('SUNAT_CONNECT_TIMEOUT', 10),
-    'ssl_verify'      => env('SUNAT_SSL_VERIFY', true),
+    'verify_ssl'      => env('SUNAT_VERIFY_SSL', true),
 
     /*
     |--------------------------------------------------------------------------
-    | Proveedores Personalizados
+    | Proveedores personalizados
     |--------------------------------------------------------------------------
-    |
-    | Registra clases propias que implementen ProviderInterface.
-    |
+    | Registra implementaciones propias de ProviderInterface.
     | Ejemplo:
-    |   'providers' => [
-    |       'mi_proveedor' => \App\Services\MiProveedorPersonalizado::class,
+    |   'custom_providers' => [
+    |       'mi_ose' => \App\Sunat\MiOseProvider::class,
     |   ],
-    |
     */
-
-    'providers' => [],
+    'custom_providers' => [],
 
 ];
