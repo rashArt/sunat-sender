@@ -5,107 +5,111 @@ declare(strict_types=1);
 namespace RashArt\SunatSender\DTOs;
 
 /**
- * Datos del documento electrónico listo para enviarse a SUNAT o proveedor.
+ * DTO central del pipeline de envío.
  *
- * Contiene el XML firmado + metadatos mínimos para construir el nombre de archivo
- * y determinar el endpoint correcto.
+ * Transporta toda la información necesaria para generar, firmar,
+ * empaquetar y enviar un documento electrónico a SUNAT (o intermediario).
+ *
+ * Inmutable por diseño (readonly).
  */
 final readonly class DocumentData
 {
     public function __construct(
-        /**
-         * RUC del emisor (11 dígitos).
-         */
+        /** RUC del emisor. */
         public string $ruc,
 
         /**
-         * Tipo de documento UBL:
-         *   01 = Factura
-         *   03 = Boleta
-         *   07 = Nota de crédito
-         *   08 = Nota de débito
-         *   09 = Liquidación de compra
-         *   RC = Resumen diario de boletas (async)
-         *   RA = Comunicación de baja (async)
+         * Tipo de documento SUNAT.
+         * Ej: '01' (Factura), '03' (Boleta), '07' (NC), '08' (ND),
+         *     '09' (Guía), '20' (Retención), '40' (Percepción).
          */
-        public string $type,
+        public string $documentType,
+
+        /** Serie del documento. Ej: F001, B001. */
+        public string $serie,
+
+        /** Correlativo del documento. Ej: 1, 1234. */
+        public int $correlativo,
+
+        /** Contenido XML del documento (sin firmar o firmado). */
+        public string $xml,
+
+        /** Credenciales de la cuenta SUNAT asociada al emisor. */
+        public SunatAccountData $account,
 
         /**
-         * Serie del comprobante (ej: F001, B001, RC-20240101).
+         * Contenido del ZIP en base64.
+         * Se genera en el pipeline (pipe BuildZip), no se pasa al construir.
          */
-        public string $series,
+        public string $zipBase64 = '',
 
         /**
-         * Número correlativo (ej: 1, 100, 9999).
-         * Para documentos async (RC/RA) puede ser 1.
+         * Número de ticket devuelto por SUNAT para documentos asíncronos
+         * (Boletas en lote, resúmenes, bajas, etc.).
          */
-        public int $correlative,
-
-        /**
-         * Contenido XML firmado (UTF-8, sin BOM).
-         */
-        public string $xmlSigned,
-
-        /**
-         * Credenciales SOL del emisor.
-         */
-        public SunatAccount $account,
-
-        /**
-         * Metadatos opcionales para el proveedor (OSE/PSE pueden necesitar campos extra).
-         */
-        public array $metadata = [],
+        public string $ticketNumber = '',
     ) {}
 
     /**
-     * Nombre del archivo XML según nomenclatura SUNAT:
-     * {RUC}-{TIPO}-{SERIE}-{CORRELATIVO}.xml
+     * Nombre de archivo según nomenclatura SUNAT:
+     * RUC-TipoDoc-Serie-Correlativo.xml
+     * Ej: 20123456789-01-F001-1.xml
      */
-    public function getFileName(): string
+    public function fileName(): string
     {
-        return sprintf('%s-%s-%s-%d.xml', $this->ruc, $this->type, $this->series, $this->correlative);
+        return implode('-', [
+            $this->ruc,
+            $this->documentType,
+            $this->serie,
+            $this->correlativo,
+        ]) . '.xml';
     }
 
     /**
-     * Nombre del ZIP que SUNAT espera recibir (misma base, extensión .zip).
+     * Nombre del ZIP según nomenclatura SUNAT.
+     * Ej: 20123456789-01-F001-1.zip
      */
-    public function getZipFileName(): string
+    public function zipFileName(): string
     {
-        return sprintf('%s-%s-%s-%d.zip', $this->ruc, $this->type, $this->series, $this->correlative);
+        return implode('-', [
+            $this->ruc,
+            $this->documentType,
+            $this->serie,
+            $this->correlativo,
+        ]) . '.zip';
     }
 
     /**
-     * Indica si este documento se procesa de forma asíncrona (ticket).
-     * SUNAT procesa RC y RA en diferido.
+     * Clona el DTO añadiendo el ZIP generado por el pipeline.
      */
-    public function isAsync(): bool
-    {
-        return in_array(strtoupper($this->type), ['RC', 'RA'], true);
-    }
-
-    /**
-     * Construye desde array. Útil para instanciar desde modelos del host app.
-     *
-     * @param array{
-     *     ruc: string,
-     *     type: string,
-     *     series: string,
-     *     correlative: int,
-     *     xml_signed: string,
-     *     account: array,
-     *     metadata?: array,
-     * } $data
-     */
-    public static function fromArray(array $data): self
+    public function withZip(string $zipBase64): self
     {
         return new self(
-            ruc:         $data['ruc'],
-            type:        $data['type'],
-            series:      $data['series'],
-            correlative: (int) $data['correlative'],
-            xmlSigned:   $data['xml_signed'],
-            account:     SunatAccount::fromArray($data['account']),
-            metadata:    $data['metadata'] ?? [],
+            ruc:          $this->ruc,
+            documentType: $this->documentType,
+            serie:        $this->serie,
+            correlativo:  $this->correlativo,
+            xml:          $this->xml,
+            account:      $this->account,
+            zipBase64:    $zipBase64,
+            ticketNumber: $this->ticketNumber,
+        );
+    }
+
+    /**
+     * Clona el DTO añadiendo el ticket de respuesta asíncrona.
+     */
+    public function withTicket(string $ticketNumber): self
+    {
+        return new self(
+            ruc:          $this->ruc,
+            documentType: $this->documentType,
+            serie:        $this->serie,
+            correlativo:  $this->correlativo,
+            xml:          $this->xml,
+            account:      $this->account,
+            zipBase64:    $this->zipBase64,
+            ticketNumber: $ticketNumber,
         );
     }
 }
